@@ -25,6 +25,8 @@ type ManagerOptions struct {
 	MetricsBindAddress     string
 	HealthProbeBindAddress string
 	LeaderElect            bool
+	// Logs overrides the launcher log reader. Nil reads from the API server.
+	Logs LogReader
 }
 
 // ParseControllerFlags parses the flags of the controller role.
@@ -117,16 +119,20 @@ func NewManager(restCfg *rest.Config, cfg Config, opts ManagerOptions) (ctrl.Man
 	if err != nil {
 		return nil, fmt.Errorf("creating manager: %w", err)
 	}
-	cs, err := kubernetes.NewForConfig(restCfg)
-	if err != nil {
-		return nil, fmt.Errorf("creating clientset: %w", err)
+	logs := opts.Logs
+	if logs == nil {
+		cs, err := kubernetes.NewForConfig(restCfg)
+		if err != nil {
+			return nil, fmt.Errorf("creating clientset: %w", err)
+		}
+		logs = NewKubeLogReader(cs)
 	}
 	clk := clock.RealClock{}
 	setups := []interface{ SetupWithManager(ctrl.Manager) error }{
 		&ProfileReconciler{Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Cfg: cfg, Clock: clk},
 		&HarnessReconciler{Client: mgr.GetClient(), Cfg: cfg},
 		&QueueReconciler{Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Cfg: cfg, JobTemplate: tmpl},
-		&RunReconciler{Client: mgr.GetClient(), Logs: NewKubeLogReader(cs), Cfg: cfg, Clock: clk},
+		&RunReconciler{Client: mgr.GetClient(), Logs: logs, Cfg: cfg, Clock: clk},
 	}
 	for _, s := range setups {
 		if err := s.SetupWithManager(mgr); err != nil {
