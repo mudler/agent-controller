@@ -194,7 +194,9 @@ spec:
             - resources
             type: object
           status:
-            description: AgentProfileStatus is written by the controller.
+            description: |-
+              AgentProfileStatus is written by the controller, except validatedFor,
+              which the server writes when the owner validates the profile.
             properties:
               conditions:
                 items:
@@ -263,6 +265,31 @@ spec:
               nextScheduleTime:
                 format: date-time
                 type: string
+              validatedFor:
+                description: |-
+                  ValidatedFor binds spec.validated to the harness profile and GitHub
+                  login that the owner validated.
+                properties:
+                  githubLoginUID:
+                    description: |-
+                      UID is a type that holds unique ID values, including UUIDs.  Because we
+                      don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                      intent and helps make sure that UIDs and names do not get conflated.
+                    type: string
+                  harnessGeneration:
+                    format: int64
+                    type: integer
+                  harnessUID:
+                    description: |-
+                      UID is a type that holds unique ID values, including UUIDs.  Because we
+                      don't ONLY use UUIDs, this is an alias to string.  Being a type captures
+                      intent and helps make sure that UIDs and names do not get conflated.
+                    type: string
+                required:
+                - githubLoginUID
+                - harnessGeneration
+                - harnessUID
+                type: object
               version:
                 description: Version is the generation of the spec.
                 format: int64

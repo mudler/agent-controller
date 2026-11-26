@@ -252,9 +252,37 @@ func (s *Store) SuspendProfile(ctx context.Context, id *Identity, name string, s
 	})
 }
 
-// ValidateProfile marks a profile as validated by the owner.
+// ValidateProfile marks a profile as validated by the owner. It first
+// records which harness profile (UID and generation) and GitHub login (UID)
+// the owner validated, so a later replacement of either one does not keep
+// the validation.
 func (s *Store) ValidateProfile(ctx context.Context, id *Identity, name string) (*ProfileView, error) {
 	if err := Require(id, ScopeProfilesValidate); err != nil {
+		return nil, err
+	}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		p := &v1alpha1.AgentProfile{}
+		if err := s.C.Get(ctx, s.key(name), p); err != nil {
+			return fmt.Errorf("getting profile: %w", err)
+		}
+		h := &v1alpha1.HarnessProfile{}
+		if err := s.C.Get(ctx, s.key(p.Spec.Harness), h); err != nil {
+			if apierrors.IsNotFound(err) {
+				return newAPIError(http.StatusUnprocessableEntity, "harness", "harness profile not found")
+			}
+			return fmt.Errorf("getting harness profile: %w", err)
+		}
+		gh := &v1alpha1.Login{}
+		if err := s.C.Get(ctx, s.key(p.Spec.GitHub), gh); err != nil {
+			if apierrors.IsNotFound(err) {
+				return newAPIError(http.StatusUnprocessableEntity, "github", "login not found")
+			}
+			return fmt.Errorf("getting github login: %w", err)
+		}
+		p.Status.ValidatedFor = policy.BindingFor(h, gh)
+		return s.C.Status().Update(ctx, p)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return s.changeProfile(ctx, id, name, func(p *v1alpha1.AgentProfile) error {
@@ -374,6 +402,11 @@ func (s *Store) CreateHarness(ctx context.Context, id *Identity, name string, sp
 	if errs := policy.ValidateHarness(env, &spec); errs != nil {
 		return nil, errs
 	}
+	// Profiles that name this harness profile were validated against
+	// another object, or against none.
+	if err := s.resetProfilesUsing(ctx, id, name); err != nil {
+		return nil, err
+	}
 	h := &v1alpha1.HarnessProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: s.Namespace}, Spec: spec}
 	if err := s.C.Create(ctx, h); err != nil {
 		return nil, fmt.Errorf("creating harness profile: %w", err)
@@ -395,14 +428,29 @@ func (s *Store) UpdateHarness(ctx context.Context, id *Identity, name string, sp
 	if errs := policy.ValidateHarness(env, &spec); errs != nil {
 		return nil, errs
 	}
+	current := &v1alpha1.HarnessProfile{}
+	if err := s.C.Get(ctx, s.key(name), current); err != nil {
+		return nil, fmt.Errorf("getting harness profile: %w", err)
+	}
+	// Reset before the change, so no profile is validated against the new
+	// harness settings even for a moment.
+	if policy.HarnessChangeResets(&current.Spec, &spec) {
+		if err := s.resetProfilesUsing(ctx, id, name); err != nil {
+			return nil, err
+		}
+	}
 	var out *v1alpha1.HarnessProfile
-	var reset bool
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		h := &v1alpha1.HarnessProfile{}
 		if err := s.C.Get(ctx, s.key(name), h); err != nil {
 			return fmt.Errorf("getting harness profile: %w", err)
 		}
-		reset = policy.HarnessChangeResets(&h.Spec, &spec)
+		if h.UID != current.UID {
+			return newAPIError(http.StatusConflict, "name", "the harness profile was replaced; retry")
+		}
+		if policy.HarnessChangeResets(&current.Spec, &h.Spec) {
+			return newAPIError(http.StatusConflict, "spec", "the harness profile changed; retry")
+		}
 		h.Spec = spec
 		if err := s.C.Update(ctx, h); err != nil {
 			return err
@@ -412,11 +460,6 @@ func (s *Store) UpdateHarness(ctx context.Context, id *Identity, name string, sp
 	})
 	if err != nil {
 		return nil, err
-	}
-	if reset {
-		if err := s.resetProfilesUsing(ctx, id, name); err != nil {
-			return nil, err
-		}
 	}
 	return harnessView(out), nil
 }
@@ -457,6 +500,9 @@ func (s *Store) resetProfilesUsing(ctx context.Context, id *Identity, harness st
 // invalid.
 func (s *Store) DeleteHarness(ctx context.Context, id *Identity, name string) error {
 	if err := Require(id, ScopeProfilesWrite); err != nil {
+		return err
+	}
+	if err := s.resetProfilesUsing(ctx, id, name); err != nil {
 		return err
 	}
 	h := &v1alpha1.HarnessProfile{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: s.Namespace}}

@@ -61,7 +61,7 @@ func (r *ProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	status.Version = prof.Generation
 	status.LastChangedBy = prof.Annotations[AnnotationLastChangedBy]
 
-	result, err := r.schedule(ctx, prof, status, errs == nil)
+	result, err := r.schedule(ctx, prof, status, errs == nil && policy.ValidationCurrent(env, prof))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -99,10 +99,10 @@ func (r *ProfileReconciler) schedule(
 	ctx context.Context,
 	prof *v1alpha1.AgentProfile,
 	status *v1alpha1.AgentProfileStatus,
-	valid bool,
+	runnable bool,
 ) (ctrl.Result, error) {
 	s := prof.Spec.Schedule
-	if s == nil || s.Suspend || !valid || !prof.Spec.Validated {
+	if s == nil || s.Suspend || !runnable {
 		status.NextScheduleTime = nil
 		return ctrl.Result{}, nil
 	}

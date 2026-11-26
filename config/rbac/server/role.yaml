@@ -82,6 +82,7 @@ rules:
 - apiGroups:
   - agents.mudler.dev
   resources:
+  - agentprofiles/status
   - logins/status
   verbs:
   - get

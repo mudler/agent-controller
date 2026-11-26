@@ -6,7 +6,7 @@ package server
 // resolved run ConfigMaps that the launcher reads.
 //
 // +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles;harnessprofiles;agentruns;logins,verbs=get;list;create;update;patch;delete
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=logins/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=logins/status;agentprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentpolicies,verbs=get;list
 // +kubebuilder:rbac:groups="",namespace=agents,resources=pods,verbs=get;list
 // +kubebuilder:rbac:groups="",namespace=agents,resources=pods/log,verbs=get

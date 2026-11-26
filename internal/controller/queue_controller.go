@@ -139,7 +139,7 @@ func (r *QueueReconciler) snapshot(ctx context.Context) (admission.Snapshot, map
 		}
 		specs[p.Name] = &p.Spec
 		errs := policy.ValidateProfile(env, &p.Spec)
-		state := admission.ProfileState{Exists: true, Valid: errs == nil, Validated: p.Spec.Validated, MaxParallel: p.Spec.MaxParallel}
+		state := admission.ProfileState{Exists: true, Valid: errs == nil, Validated: policy.ValidationCurrent(env, p), MaxParallel: p.Spec.MaxParallel}
 		if errs != nil {
 			state.Reason = errs.Error()
 		}

@@ -291,3 +291,31 @@ func TestQueueRetention(t *testing.T) {
 		return nil
 	})
 }
+
+func TestQueueRejectsStaleValidation(t *testing.T) {
+	c := testenv.Client(t)
+	ctx := context.Background()
+	ns := newNamespace(t, c)
+	f := newFixtures(ns)
+	f.create(t, c)
+	mustCreate(t, c, newTestProfile(ns, "stale"))
+
+	// Delete and recreate the harness profile with the same name: the
+	// profile keeps spec.validated, but the owner validated another object.
+	if err := c.Delete(ctx, f.Harness); err != nil {
+		t.Fatal(err)
+	}
+	again := exampleHarness()
+	again.Namespace = ns
+	mustCreate(t, c, again)
+
+	mustCreate(t, c, newRun(ns, "stale-1", "stale", nil))
+	startQueue(t, ns, testConfig(ns))
+	run := waitPhase(t, c, ns, "stale-1", v1alpha1.PhaseRejected)
+	if !strings.Contains(run.Status.Message, "not validated") {
+		t.Errorf("message = %q", run.Status.Message)
+	}
+	if jobExists(t, c, ns, "stale-1") {
+		t.Error("a Job was created for a stale validation")
+	}
+}

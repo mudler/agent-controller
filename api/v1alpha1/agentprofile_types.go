@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // ConditionValid is the condition type that reports policy fit.
@@ -100,7 +101,16 @@ type AgentProfileSpec struct {
 	Validated bool `json:"validated"`
 }
 
-// AgentProfileStatus is written by the controller.
+// ValidationBinding records the objects the owner validated a profile
+// against. A profile counts as validated only while they are unchanged.
+type ValidationBinding struct {
+	HarnessUID        types.UID `json:"harnessUID"`
+	HarnessGeneration int64     `json:"harnessGeneration"`
+	GitHubLoginUID    types.UID `json:"githubLoginUID"`
+}
+
+// AgentProfileStatus is written by the controller, except validatedFor,
+// which the server writes when the owner validates the profile.
 type AgentProfileStatus struct {
 	// +listType=map
 	// +listMapKey=type
@@ -115,6 +125,10 @@ type AgentProfileStatus struct {
 	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
 	// +optional
 	NextScheduleTime *metav1.Time `json:"nextScheduleTime,omitempty"`
+	// ValidatedFor binds spec.validated to the harness profile and GitHub
+	// login that the owner validated.
+	// +optional
+	ValidatedFor *ValidationBinding `json:"validatedFor,omitempty"`
 }
 
 // AgentProfile is a runnable agent configuration.

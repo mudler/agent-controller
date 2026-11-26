@@ -365,3 +365,62 @@ func TestRESTHealthzAndUnknownRoute(t *testing.T) {
 	ts.mustDo(http.MethodGet, "/healthz", "", nil, 200)
 	ts.mustDo(http.MethodGet, "/v1/nope", "reader-token", nil, 404)
 }
+
+func TestRESTHarnessRecreateResetsValidated(t *testing.T) {
+	ts := newTestServer(t)
+	ts.createProfile("p", testProfileSpec())
+	v := decodeInto[ProfileView](t, ts.mustDo(http.MethodPost, "/v1/profiles/p/validate", "owner-token", nil, 200))
+	if !v.Spec.Validated || v.Status.ValidatedFor == nil || v.Status.ValidatedFor.HarnessUID == "" || v.Status.ValidatedFor.GitHubLoginUID == "" {
+		t.Fatalf("validate = %+v", v)
+	}
+
+	ts.mustDo(http.MethodDelete, "/v1/harnesses/nib-default", "agent-token", nil, 200)
+	v = decodeInto[ProfileView](t, ts.mustDo(http.MethodGet, "/v1/profiles/p", "reader-token", nil, 200))
+	if v.Spec.Validated {
+		t.Error("harness delete kept validated")
+	}
+
+	ts.mustDo(http.MethodPost, "/v1/harnesses", "agent-token", map[string]any{"name": "nib-default", "spec": testHarnessSpec()}, 201)
+	ts.mustDo(http.MethodPost, "/v1/profiles/p/validate", "owner-token", nil, 200)
+	// Recreating a harness profile under a validated profile resets it.
+	ts.mustDo(http.MethodDelete, "/v1/harnesses/nib-default", "agent-token", nil, 200)
+	p := &v1alpha1.AgentProfile{}
+	if err := ts.c.Get(context.Background(), client.ObjectKey{Namespace: ts.ns, Name: "p"}, p); err != nil {
+		t.Fatal(err)
+	}
+	p.Spec.Validated = true // simulate a validated profile that outlived its harness
+	if err := ts.c.Update(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	ts.mustDo(http.MethodPost, "/v1/harnesses", "agent-token", map[string]any{"name": "nib-default", "spec": testHarnessSpec()}, 201)
+	v = decodeInto[ProfileView](t, ts.mustDo(http.MethodGet, "/v1/profiles/p", "reader-token", nil, 200))
+	if v.Spec.Validated {
+		t.Error("harness create kept validated on a profile that references it")
+	}
+}
+
+func TestRESTHarnessUpdateResetsBeforeChange(t *testing.T) {
+	ts := newTestServer(t)
+	ts.createProfile("p", testProfileSpec())
+	ts.mustDo(http.MethodPost, "/v1/profiles/p/validate", "owner-token", nil, 200)
+	h := testHarnessSpec()
+	h.Endpoint = "https://api.example.com"
+	ts.mustDo(http.MethodPut, "/v1/harnesses/nib-default", "agent-token", map[string]any{"spec": h}, 200)
+
+	p := &v1alpha1.AgentProfile{}
+	hp := &v1alpha1.HarnessProfile{}
+	if err := ts.c.Get(context.Background(), client.ObjectKey{Namespace: ts.ns, Name: "p"}, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.c.Get(context.Background(), client.ObjectKey{Namespace: ts.ns, Name: "nib-default"}, hp); err != nil {
+		t.Fatal(err)
+	}
+	if p.Spec.Validated {
+		t.Error("endpoint change kept validated")
+	}
+	// The reset is written before the harness changes, so the profile's
+	// resourceVersion predates the harness update.
+	if p.ResourceVersion >= hp.ResourceVersion && len(p.ResourceVersion) == len(hp.ResourceVersion) {
+		t.Errorf("profile reset (rv %s) happened after the harness change (rv %s)", p.ResourceVersion, hp.ResourceVersion)
+	}
+}

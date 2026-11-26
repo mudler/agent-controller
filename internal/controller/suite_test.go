@@ -18,6 +18,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/mudler/agent-controller/api/v1alpha1"
+	"github.com/mudler/agent-controller/internal/policy"
 	"github.com/mudler/agent-controller/internal/testenv"
 )
 
@@ -58,6 +59,26 @@ func mustCreate(t *testing.T, c client.Client, objs ...client.Object) {
 		if err := c.Create(context.Background(), o); err != nil {
 			t.Fatalf("creating %T %s: %v", o, o.GetName(), err)
 		}
+		if p, ok := o.(*v1alpha1.AgentProfile); ok && p.Spec.Validated {
+			bindValidation(t, c, p)
+		}
+	}
+}
+
+// bindValidation records the owner validation of a profile against its
+// current harness profile and GitHub login, as the server does.
+func bindValidation(t *testing.T, c client.Client, p *v1alpha1.AgentProfile) {
+	t.Helper()
+	ctx := context.Background()
+	h := &v1alpha1.HarnessProfile{}
+	gh := &v1alpha1.Login{}
+	if c.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Spec.Harness}, h) != nil ||
+		c.Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Spec.GitHub}, gh) != nil {
+		return
+	}
+	p.Status.ValidatedFor = policy.BindingFor(h, gh)
+	if err := c.Status().Update(ctx, p); err != nil {
+		t.Fatalf("binding validation of %s: %v", p.Name, err)
 	}
 }
 
