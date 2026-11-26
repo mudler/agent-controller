@@ -1,0 +1,89 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-controller-server
+  namespace: agent-controller-history
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-controller-server
+  namespace: agent-logins
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-controller-server
+  namespace: agents
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resourceNames:
+  - agent-controller-tokens
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentpolicies
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentprofiles
+  - agentruns
+  - harnessprofiles
+  - logins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - logins/status
+  verbs:
+  - get
+  - patch
+  - update

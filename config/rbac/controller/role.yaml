@@ -1,0 +1,140 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-controller-controller
+  namespace: agents
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - delete
+  - list
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentprofiles
+  - harnessprofiles
+  - logins
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentprofiles/finalizers
+  - agentruns/finalizers
+  - harnessprofiles/finalizers
+  - logins/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentprofiles/status
+  - agentruns/status
+  - harnessprofiles/status
+  - logins/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - agents.mudler.dev
+  resources:
+  - agentruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agents.x-k8s.io
+  resources:
+  - sandboxes
+  verbs:
+  - delete
+  - list
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - delete
+  - list

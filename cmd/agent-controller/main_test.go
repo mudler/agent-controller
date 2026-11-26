@@ -18,6 +18,7 @@ func TestRunDispatch(t *testing.T) {
 		{name: "unknown", args: []string{"frobnicate"}, wantCode: 2, wantErr: `unknown command "frobnicate"`},
 		{name: "version", args: []string{"version"}, wantCode: 0, wantOut: version},
 		{name: "help", args: []string{"--help"}, wantCode: 0, wantOut: "commands:"},
+		{name: "server bad flags", args: []string{"server", "--harness-versions="}, wantCode: 2, wantErr: "harness-versions"},
 		{name: "controller bad flags", args: []string{"controller", "--harness-versions=bad"}, wantCode: 2, wantErr: "kind=version"},
 	}
 	for _, tt := range tests {

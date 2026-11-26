@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/mudler/agent-controller/internal/controller"
+	"github.com/mudler/agent-controller/internal/server"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -80,12 +81,15 @@ func runController(args []string, stderr io.Writer) int {
 	return 0
 }
 
-func runServer(_ []string, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "server: not implemented")
-	return 1
-}
-
-func runToken(_ []string, _ io.Writer, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "token: not implemented")
-	return 1
+func runServer(args []string, stderr io.Writer) int {
+	if _, err := server.ParseServerFlags(args); err != nil {
+		fmt.Fprintf(stderr, "server: %v\n", err)
+		return 2
+	}
+	ctrl.SetLogger(zap.New(zap.WriteTo(stderr)))
+	if err := server.RunServer(ctrl.SetupSignalHandler(), args); err != nil {
+		fmt.Fprintf(stderr, "server: %v\n", err)
+		return 1
+	}
+	return 0
 }

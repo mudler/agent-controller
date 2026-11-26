@@ -20,6 +20,8 @@ generate: ## Generate DeepCopy methods.
 .PHONY: manifests
 manifests: ## Generate CRDs and RBAC.
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=agent-controller-controller paths="./internal/controller/..." output:rbac:dir=config/rbac/controller
+	$(CONTROLLER_GEN) rbac:roleName=agent-controller-server paths="./internal/server/..." output:rbac:dir=config/rbac/server
 
 .PHONY: fmt
 fmt:
