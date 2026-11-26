@@ -1,0 +1,11 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 16px; }
+main { max-width: 960px; margin: 0 auto; }
+label { display: block; margin-top: 12px; font-weight: 600; }
+label.inline { font-weight: 400; }
+input:not([type=checkbox]), select, textarea { width: 100%; box-sizing: border-box; padding: 6px; }
+button { margin-top: 12px; padding: 6px 14px; }
+table { width: 100%; border-collapse: collapse; overflow-x: auto; display: block; }
+th, td { text-align: left; padding: 6px; border-bottom: 1px solid #8884; white-space: nowrap; }
+.note { opacity: 0.8; }
+#status { min-height: 1.2em; }

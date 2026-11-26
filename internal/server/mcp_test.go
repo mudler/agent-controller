@@ -251,7 +251,7 @@ func TestMCPToolsHappyPathAndScopes(t *testing.T) {
 	ts.mustCall(agent, "delete_harness", map[string]any{"name": "nib-two"})
 }
 
-func TestMCPListLoginsNameAndKindOnly(t *testing.T) {
+func TestMCPListLoginNamesAndKinds(t *testing.T) {
 	ts := newTestServer(t)
 	sess := ts.mcpSession("reader-token")
 	out := ts.mustCall(sess, "list_logins", map[string]any{})

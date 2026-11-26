@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logins</title>
+<link rel="stylesheet" href="/logins.css">
+<script src="/logins.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Logins</h1>
+  <p class="note">Values are write-only. This page never shows a stored value.</p>
+
+  <section>
+    <label for="token">Owner token</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false">
+    <button id="load" type="button">Load</button>
+    <p id="status" role="status"></p>
+  </section>
+
+  <section>
+    <h2>Stored logins</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Kind</th><th>Repos</th><th>Egress all</th><th>Description</th><th>Rotated at</th><th>Rotated by</th><th></th></tr>
+      </thead>
+      <tbody id="logins"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Add or rotate</h2>
+    <form id="form" autocomplete="off">
+      <label for="name">Name</label>
+      <input id="name" required pattern="[a-z0-9]([-a-z0-9.]*[a-z0-9])?">
+      <label for="kind">Kind</label>
+      <select id="kind">
+        <option value="github-token">github-token</option>
+        <option value="model-api-key">model-api-key</option>
+        <option value="claude-credentials">claude-credentials</option>
+      </select>
+      <label for="repos">Repos (github-token only, comma separated, owner/name or owner/*)</label>
+      <input id="repos">
+      <label class="inline"><input id="egressAll" type="checkbox"> Allow egress all (github-token only)</label>
+      <label for="description">Description</label>
+      <input id="description" maxlength="512">
+      <label for="value">Value (leave empty to change metadata only)</label>
+      <textarea id="value" rows="3" spellcheck="false"></textarea>
+      <label for="file">Or upload a file</label>
+      <input id="file" type="file">
+      <button type="submit">Save</button>
+    </form>
+  </section>
+</main>
+</body>
+</html>

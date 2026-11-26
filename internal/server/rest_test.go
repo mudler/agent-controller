@@ -291,7 +291,7 @@ func TestRESTRunsListAndLogs(t *testing.T) {
 	}
 }
 
-func TestRESTLogins(t *testing.T) {
+func TestRESTLoginRoutes(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 
