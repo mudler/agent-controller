@@ -1,15 +1,19 @@
 package controller
 
-// Controller Role in the agents namespace. It has no access to Secrets.
+// Controller Role in the agents namespace. The verbs are exactly the ones
+// the code uses; TestControllerRBACVerbs pins them. It has no access to
+// Secrets. The controller writes only the status of profiles, harness
+// profiles and runs; it updates runs themselves only for the cleanup
+// finalizer. Cleanup lists through the uncached reader, so Services,
+// NetworkPolicies, Sandboxes and ConfigMaps need list but not watch.
 //
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles;harnessprofiles;agentruns;logins,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles/status;harnessprofiles/status;agentruns/status;logins/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles/finalizers;harnessprofiles/finalizers;agentruns/finalizers;logins/finalizers,verbs=update
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentruns,verbs=create;delete
-// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles;harnessprofiles;logins;agentpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentprofiles/status;harnessprofiles/status;agentruns/status,verbs=update
+// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentruns,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups=agents.mudler.dev,namespace=agents,resources=agentruns/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,namespace=agents,resources=jobs,verbs=create;get;list;watch;delete
-// +kubebuilder:rbac:groups="",namespace=agents,resources=configmaps,verbs=create;get;list;watch;delete
-// +kubebuilder:rbac:groups="",namespace=agents,resources=pods,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups="",namespace=agents,resources=configmaps,verbs=create;list;delete
+// +kubebuilder:rbac:groups="",namespace=agents,resources=pods,verbs=list;watch;delete
 // +kubebuilder:rbac:groups="",namespace=agents,resources=pods/log,verbs=get
 // +kubebuilder:rbac:groups="",namespace=agents,resources=services,verbs=list;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,namespace=agents,resources=networkpolicies,verbs=list;delete

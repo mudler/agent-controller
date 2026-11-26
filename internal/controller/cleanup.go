@@ -11,9 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -22,46 +20,39 @@ import (
 // launcher creates.
 var SandboxListGVK = schema.GroupVersionKind{Group: "agents.x-k8s.io", Version: "v1beta1", Kind: "SandboxList"}
 
+// CleanupOptions controls one cleanup pass.
+type CleanupOptions struct {
+	// StopLauncher deletes the launcher Pod too and waits until it is gone.
+	// Use it for cancelled and deleted runs. Otherwise the launcher Pod is
+	// kept for its log, and the pass waits only while it still runs.
+	StopLauncher bool
+}
+
 // Cleanup deletes the run-labeled Sandboxes, Services, NetworkPolicies,
-// ConfigMaps, Leases and non-launcher Pods of a run. The launcher Job and
-// its Pod stay, so the log remains readable. done is true when a fresh list
-// finds none of them. A missing Sandbox CRD is not an error.
-func Cleanup(ctx context.Context, c client.Client, namespace, run string) (done bool, err error) {
+// ConfigMaps and non-launcher Pods of a run. It lists through the uncached
+// reader r. It never deletes Leases: locks are released by ReleaseLocks
+// only after a pass reports done. done is true when a pass finds none of
+// these objects and no running launcher Pod. A missing Sandbox CRD is not
+// an error.
+func Cleanup(ctx context.Context, c client.Client, r client.Reader, namespace, run string, opts CleanupOptions) (done bool, err error) {
 	runSel := client.MatchingLabels{LabelRun: run}
-	notLauncher, err := labels.NewRequirement(LabelComponent, selection.NotEquals, []string{ComponentLauncher})
-	if err != nil {
-		return false, fmt.Errorf("building selector: %w", err)
-	}
-	podSel := client.MatchingLabelsSelector{Selector: labels.SelectorFromSet(labels.Set{LabelRun: run}).Add(*notLauncher)}
 
 	sandboxes := &unstructured.UnstructuredList{}
 	sandboxes.SetGroupVersionKind(SandboxListGVK)
 
-	lists := []struct {
-		list client.ObjectList
-		sel  client.ListOption
-	}{
-		{list: sandboxes, sel: runSel},
-		{list: &corev1.ServiceList{}, sel: runSel},
-		{list: &networkingv1.NetworkPolicyList{}, sel: runSel},
-		{list: &corev1.ConfigMapList{}, sel: runSel},
-		{list: &coordinationv1.LeaseList{}, sel: runSel},
-		{list: &corev1.PodList{}, sel: podSel},
-	}
-
 	remaining := 0
 	var errs []error
-	for _, l := range lists {
-		if err := c.List(ctx, l.list, client.InNamespace(namespace), l.sel); err != nil {
+	for _, list := range []client.ObjectList{sandboxes, &corev1.ServiceList{}, &networkingv1.NetworkPolicyList{}, &corev1.ConfigMapList{}} {
+		if err := r.List(ctx, list, client.InNamespace(namespace), runSel); err != nil {
 			if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
 				continue
 			}
-			errs = append(errs, fmt.Errorf("listing %T: %w", l.list, err))
+			errs = append(errs, fmt.Errorf("listing %T: %w", list, err))
 			continue
 		}
-		items, err := meta.ExtractList(l.list)
+		items, err := meta.ExtractList(list)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("extracting %T: %w", l.list, err))
+			errs = append(errs, fmt.Errorf("extracting %T: %w", list, err))
 			continue
 		}
 		for _, item := range items {
@@ -70,21 +61,64 @@ func Cleanup(ctx context.Context, c client.Client, namespace, run string) (done 
 				continue
 			}
 			remaining++
-			if !obj.GetDeletionTimestamp().IsZero() {
-				continue
-			}
-			err := c.Delete(ctx, obj, client.PropagationPolicy("Background"), client.Preconditions{UID: ptr.To(obj.GetUID())})
-			if err != nil && !apierrors.IsNotFound(err) && !apierrors.IsConflict(err) {
-				errs = append(errs, fmt.Errorf("deleting %s: %w", obj.GetName(), err))
-			}
+			errs = append(errs, deleteObject(ctx, c, obj))
 		}
 	}
+
+	pods := &corev1.PodList{}
+	if err := r.List(ctx, pods, client.InNamespace(namespace), runSel); err != nil {
+		errs = append(errs, fmt.Errorf("listing pods: %w", err))
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		launcher := pod.Labels[LabelComponent] == ComponentLauncher
+		if launcher && !opts.StopLauncher {
+			if !podFinished(pod) {
+				remaining++
+			}
+			continue
+		}
+		remaining++
+		errs = append(errs, deleteObject(ctx, c, pod))
+	}
+
 	if err := errors.Join(errs...); err != nil {
 		return false, err
 	}
-	if remaining > 0 {
-		// Deletions were issued; the next call confirms they are gone.
-		return false, nil
+	return remaining == 0, nil
+}
+
+func podFinished(pod *corev1.Pod) bool {
+	return pod.DeletionTimestamp.IsZero() &&
+		(pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed)
+}
+
+func deleteObject(ctx context.Context, c client.Client, obj client.Object) error {
+	if !obj.GetDeletionTimestamp().IsZero() {
+		return nil
 	}
-	return true, nil
+	err := c.Delete(ctx, obj, client.PropagationPolicy("Background"), client.Preconditions{UID: ptr.To(obj.GetUID())})
+	if err != nil && !apierrors.IsNotFound(err) && !apierrors.IsConflict(err) {
+		return fmt.Errorf("deleting %s: %w", obj.GetName(), err)
+	}
+	return nil
+}
+
+// ReleaseLocks deletes the run-labeled Leases of a run: the memory lock it
+// holds and any lock the launcher took. Call it only after Cleanup reports
+// done, so no sandbox can still write the memory volume.
+func ReleaseLocks(ctx context.Context, c client.Client, r client.Reader, namespace, run string) error {
+	leases := &coordinationv1.LeaseList{}
+	if err := r.List(ctx, leases, client.InNamespace(namespace), client.MatchingLabels{LabelRun: run}); err != nil {
+		return fmt.Errorf("listing locks: %w", err)
+	}
+	var errs []error
+	for i := range leases.Items {
+		lease := &leases.Items[i]
+		if holder := ptr.Deref(lease.Spec.HolderIdentity, ""); holder != "" && holder != run {
+			continue
+		}
+		errs = append(errs, deleteLease(ctx, c, lease))
+	}
+	return errors.Join(errs...)
 }

@@ -6,13 +6,11 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
-	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/clock"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -41,7 +39,9 @@ const (
 // Jobs, Pods and Leases.
 type RunReconciler struct {
 	client.Client
-	Logs  LogReader
+	// Reader lists run objects and locks without the cache.
+	Reader client.Reader
+	Logs   LogReader
 	Cfg   Config
 	Clock clock.PassiveClock
 }
@@ -54,7 +54,7 @@ func (r *RunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if !run.DeletionTimestamp.IsZero() {
-		if err := r.deleteJob(ctx, run); err != nil {
+		if err := r.deleteJob(ctx, run, metav1.DeletePropagationForeground); err != nil {
 			return ctrl.Result{}, err
 		}
 		return r.finalize(ctx, run)
@@ -74,7 +74,7 @@ func (r *RunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 func (r *RunReconciler) track(ctx context.Context, run *v1alpha1.AgentRun) (ctrl.Result, error) {
 	status := run.Status.DeepCopy()
 	if run.Spec.Cancel {
-		if err := r.deleteJob(ctx, run); err != nil {
+		if err := r.deleteJob(ctx, run, metav1.DeletePropagationForeground); err != nil {
 			return ctrl.Result{}, err
 		}
 		r.complete(status, v1alpha1.PhaseCancelled, "cancelled", nil)
@@ -154,20 +154,23 @@ func (r *RunReconciler) writeStatus(ctx context.Context, run *v1alpha1.AgentRun,
 	return res, nil
 }
 
-// finalize cleans up after a final phase or a deletion, releases the memory
-// lock and removes the finalizer.
+// finalize cleans up after a final phase or a deletion, then releases the
+// locks and removes the finalizer. Locks go only after a cleanup pass finds
+// no run objects left, so no sandbox outlives its memory lock. For a
+// cancelled or deleted run the launcher Pod is stopped first.
 func (r *RunReconciler) finalize(ctx context.Context, run *v1alpha1.AgentRun) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(run, FinalizerCleanup) {
 		return ctrl.Result{}, nil
 	}
-	done, err := Cleanup(ctx, r.Client, run.Namespace, run.Name)
+	stop := run.Spec.Cancel || !run.DeletionTimestamp.IsZero() || run.Status.Phase == v1alpha1.PhaseCancelled
+	done, err := Cleanup(ctx, r.Client, r.Reader, run.Namespace, run.Name, CleanupOptions{StopLauncher: stop})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if !done {
 		return ctrl.Result{RequeueAfter: cleanupRetry}, nil
 	}
-	if err := r.releaseMemoryLock(ctx, run); err != nil {
+	if err := ReleaseLocks(ctx, r.Client, r.Reader, run.Namespace, run.Name); err != nil {
 		return ctrl.Result{}, err
 	}
 	controllerutil.RemoveFinalizer(run, FinalizerCleanup)
@@ -180,25 +183,9 @@ func (r *RunReconciler) finalize(ctx context.Context, run *v1alpha1.AgentRun) (c
 	return ctrl.Result{}, nil
 }
 
-// releaseMemoryLock deletes memory-<profile> when this run holds it.
-func (r *RunReconciler) releaseMemoryLock(ctx context.Context, run *v1alpha1.AgentRun) error {
-	lease := &coordinationv1.Lease{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: run.Namespace, Name: MemoryLockName(run.Spec.Profile)}, lease)
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("getting memory lock: %w", err)
-	}
-	if ptr.Deref(lease.Spec.HolderIdentity, "") != run.Name {
-		return nil
-	}
-	return deleteLease(ctx, r.Client, lease)
-}
-
-func (r *RunReconciler) deleteJob(ctx context.Context, run *v1alpha1.AgentRun) error {
+func (r *RunReconciler) deleteJob(ctx context.Context, run *v1alpha1.AgentRun, propagation metav1.DeletionPropagation) error {
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Namespace: run.Namespace, Name: jobName(run)}}
-	err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))
+	err := r.Delete(ctx, job, client.PropagationPolicy(propagation))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("deleting launcher job: %w", err)
 	}

@@ -12,9 +12,7 @@ rules:
   verbs:
   - create
   - delete
-  - get
   - list
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -35,7 +33,6 @@ rules:
   - pods
   verbs:
   - delete
-  - get
   - list
   - watch
 - apiGroups:
@@ -55,41 +52,21 @@ rules:
   - agents.mudler.dev
   resources:
   - agentpolicies
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - agents.mudler.dev
-  resources:
   - agentprofiles
   - harnessprofiles
   - logins
   verbs:
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - agents.mudler.dev
   resources:
-  - agentprofiles/finalizers
-  - agentruns/finalizers
-  - harnessprofiles/finalizers
-  - logins/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - agents.mudler.dev
-  resources:
   - agentprofiles/status
+  - agentruns/finalizers
   - agentruns/status
   - harnessprofiles/status
-  - logins/status
   verbs:
-  - get
-  - patch
   - update
 - apiGroups:
   - agents.mudler.dev
@@ -100,7 +77,6 @@ rules:
   - delete
   - get
   - list
-  - patch
   - update
   - watch
 - apiGroups:

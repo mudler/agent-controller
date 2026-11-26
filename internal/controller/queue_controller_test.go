@@ -70,10 +70,14 @@ func waitPhase(t *testing.T, c client.Client, ns, name string, want v1alpha1.Pha
 	return run
 }
 
+// jobExists reports whether the Job exists and is not being deleted.
+// envtest has no garbage collector, so a foreground deletion never
+// finishes there; a deletion timestamp counts as gone.
 func jobExists(t *testing.T, c client.Client, ns, name string) bool {
 	t.Helper()
-	err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: name}, &batchv1.Job{})
-	return err == nil
+	job := &batchv1.Job{}
+	err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: name}, job)
+	return err == nil && job.DeletionTimestamp.IsZero()
 }
 
 // finishRun marks a run final and removes its memory lock, as the run

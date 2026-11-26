@@ -69,7 +69,7 @@ func startController(t *testing.T, ns string, cfg Config, logs LogReader) {
 		if err := newQueueReconciler(t, mgr, cfg).SetupWithManager(mgr); err != nil {
 			return err
 		}
-		return (&RunReconciler{Client: mgr.GetClient(), Logs: logs, Cfg: cfg, Clock: clk}).SetupWithManager(mgr)
+		return (&RunReconciler{Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Logs: logs, Cfg: cfg, Clock: clk}).SetupWithManager(mgr)
 	})
 }
 
@@ -368,7 +368,7 @@ func startControllerStoppable(t *testing.T, ns string, cfg Config, logs LogReade
 		if err := newQueueReconciler(t, mgr, cfg).SetupWithManager(mgr); err != nil {
 			return err
 		}
-		return (&RunReconciler{Client: mgr.GetClient(), Logs: logs, Cfg: cfg, Clock: clock.RealClock{}}).SetupWithManager(mgr)
+		return (&RunReconciler{Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Logs: logs, Cfg: cfg, Clock: clock.RealClock{}}).SetupWithManager(mgr)
 	})
 }
 
@@ -399,4 +399,104 @@ func TestRunPolicyChangeRejectsQueuedKeepsRunning(t *testing.T) {
 	if p := getRun(t, c, ns, "busy").Status.Phase; p != v1alpha1.PhaseRunning {
 		t.Errorf("running run phase = %s, want Running", p)
 	}
+}
+
+const holdFinalizer = "example.com/hold"
+
+func leaseExists(t *testing.T, c client.Client, ns, name string) bool {
+	t.Helper()
+	err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: name}, &coordinationv1.Lease{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		t.Fatal(err)
+	}
+	return err == nil
+}
+
+func releaseHold(t *testing.T, c client.Client, ns, pod string) {
+	t.Helper()
+	p := &corev1.Pod{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: pod}, p); err != nil {
+		t.Fatal(err)
+	}
+	p.Finalizers = nil
+	if err := c.Update(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertLocksHeld checks for a while that both locks stay.
+func assertLocksHeld(t *testing.T, c client.Client, ns string, locks ...string) {
+	t.Helper()
+	for range 20 {
+		for _, l := range locks {
+			if !leaseExists(t, c, ns, l) {
+				t.Fatalf("lock %s released while run objects remain", l)
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestRunLocksHeldUntilSandboxGone(t *testing.T) {
+	c, ns, logs := setupRunTest(t, v1alpha1.MemoryEnabled, 1)
+	startController(t, ns, testConfig(ns), logs)
+	mustCreate(t, c, newRun(ns, "slowgone", "example", nil))
+	waitPhase(t, c, ns, "slowgone", v1alpha1.PhaseStarting)
+
+	// The launcher takes its own lock and starts a proxy that is slow to go.
+	mustCreate(t, c,
+		&coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{Name: "launcher-lock", Namespace: ns, Labels: map[string]string{LabelRun: "slowgone"}},
+			Spec:       coordinationv1.LeaseSpec{HolderIdentity: ptr.To("slowgone")},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "slowgone-proxy", Namespace: ns, Finalizers: []string{holdFinalizer},
+				Labels: map[string]string{LabelRun: "slowgone", LabelComponent: "proxy"},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "proxy", Image: "example.com/proxy"}}},
+		},
+	)
+	pod := startLauncherPod(t, c, ns, "slowgone")
+	logs.set(pod.Name, stepLine(StepHarnessStarted))
+	waitPhase(t, c, ns, "slowgone", v1alpha1.PhaseRunning)
+	terminateLauncher(t, c, pod, `{"harnessExit": 0, "error": ""}`)
+	finishJob(t, c, ns, "slowgone", true, "")
+	waitPhase(t, c, ns, "slowgone", v1alpha1.PhaseSucceeded)
+
+	assertLocksHeld(t, c, ns, MemoryLockName("example"), "launcher-lock")
+	releaseHold(t, c, ns, "slowgone-proxy")
+	waitCleanedUp(t, c, ns, "slowgone")
+	if leaseExists(t, c, ns, "launcher-lock") {
+		t.Error("launcher lock not released after cleanup")
+	}
+}
+
+func TestRunCancelWaitsForLauncherPod(t *testing.T) {
+	c, ns, logs := setupRunTest(t, v1alpha1.MemoryEnabled, 1)
+	startController(t, ns, testConfig(ns), logs)
+	mustCreate(t, c, newRun(ns, "stopping", "example", nil))
+	waitPhase(t, c, ns, "stopping", v1alpha1.PhaseStarting)
+	pod := startLauncherPod(t, c, ns, "stopping")
+	pod.Finalizers = []string{holdFinalizer}
+	if err := c.Update(context.Background(), pod); err != nil {
+		t.Fatal(err)
+	}
+	logs.set(pod.Name, stepLine(StepHarnessStarted))
+	waitPhase(t, c, ns, "stopping", v1alpha1.PhaseRunning)
+
+	run := getRun(t, c, ns, "stopping")
+	run.Spec.Cancel = true
+	if err := c.Update(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	waitPhase(t, c, ns, "stopping", v1alpha1.PhaseCancelled)
+	assertLocksHeld(t, c, ns, MemoryLockName("example"))
+
+	// The controller asked the launcher Pod to stop.
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pod), pod); err != nil || pod.DeletionTimestamp.IsZero() {
+		t.Fatalf("launcher pod not being deleted: %v", err)
+	}
+	releaseHold(t, c, ns, pod.Name)
+	waitCleanedUp(t, c, ns, "stopping")
 }
