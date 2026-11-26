@@ -1,0 +1,67 @@
+{
+  "apiVersion": "agents.mudler.dev/v1alpha1",
+  "kind": "ResolvedRun",
+  "run": "example-x7k2p",
+  "namespace": "agents",
+  "profile": "example",
+  "profileVersion": 7,
+  "trigger": "manual",
+  "requestedBy": "planner",
+  "repo": {
+    "slug": "example-org/example-repo",
+    "branch": "main",
+    "checkout": "/workspace/example-repo"
+  },
+  "prompt": "Profile prompt.\n\nTask for this run:\nDo X.",
+  "harness": {
+    "name": "nib-default",
+    "kind": "nib",
+    "version": "v0.14.2",
+    "model": "default",
+    "endpoint": "https://models.example.com/v1",
+    "config": {
+      "tools": [
+        "bash",
+        "read"
+      ],
+      "contextTokens": 32768
+    }
+  },
+  "logins": {
+    "github": {
+      "name": "gh-example",
+      "kind": "github-token"
+    },
+    "model": {
+      "name": "model-example",
+      "kind": "model-api-key"
+    }
+  },
+  "egress": {
+    "mode": "allowlist",
+    "hosts": [
+      "api.github.com:443",
+      "github.com:443",
+      "models.example.com:443"
+    ]
+  },
+  "budget": {
+    "sessionSeconds": 3000,
+    "iterations": 100
+  },
+  "resources": {
+    "cpu": "2",
+    "memory": "4Gi",
+    "workspace": "8Gi",
+    "tmp": "1Gi"
+  },
+  "memory": {
+    "enabled": true,
+    "claim": "example-memory",
+    "lock": "memory-example",
+    "launcherLock": ""
+  },
+  "proxy": {
+    "idleSeconds": 600
+  }
+}
