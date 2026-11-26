@@ -3,6 +3,8 @@ package policy
 import (
 	"testing"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	"github.com/mudler/agent-controller/api/v1alpha1"
 )
 
@@ -10,7 +12,6 @@ func TestValidationCurrent(t *testing.T) {
 	newEnv := func() Env {
 		env := testEnv()
 		env.Harnesses["nib-default"].UID = "h-1"
-		env.Harnesses["nib-default"].Generation = 3
 		env.Logins["gh-example"].UID = "gh-1"
 		return env
 	}
@@ -29,7 +30,16 @@ func TestValidationCurrent(t *testing.T) {
 		{name: "not validated", mutate: func(_ *Env, p *v1alpha1.AgentProfile) { p.Spec.Validated = false }},
 		{name: "no binding", mutate: func(_ *Env, p *v1alpha1.AgentProfile) { p.Status.ValidatedFor = nil }},
 		{name: "harness recreated", mutate: func(env *Env, _ *v1alpha1.AgentProfile) { env.Harnesses["nib-default"].UID = "h-2" }},
-		{name: "harness changed", mutate: func(env *Env, _ *v1alpha1.AgentProfile) { env.Harnesses["nib-default"].Generation = 4 }},
+		{name: "harness config changed", mutate: func(env *Env, _ *v1alpha1.AgentProfile) {
+			env.Harnesses["nib-default"].Spec.Config = &apiextensionsv1.JSON{Raw: []byte(`{"tools":["bash","read","write"]}`)}
+		}},
+		{name: "harness endpoint changed", mutate: func(env *Env, _ *v1alpha1.AgentProfile) {
+			env.Harnesses["nib-default"].Spec.Endpoint = "https://api.example.com"
+		}},
+		{name: "harness model changed only", mutate: func(env *Env, _ *v1alpha1.AgentProfile) {
+			env.Harnesses["nib-default"].Spec.Model = "other-model"
+			env.Harnesses["nib-default"].Generation++
+		}, want: true},
 		{name: "harness deleted", mutate: func(env *Env, _ *v1alpha1.AgentProfile) { delete(env.Harnesses, "nib-default") }},
 		{name: "login recreated", mutate: func(env *Env, _ *v1alpha1.AgentProfile) { env.Logins["gh-example"].UID = "gh-2" }},
 		{name: "login deleted", mutate: func(env *Env, _ *v1alpha1.AgentProfile) { delete(env.Logins, "gh-example") }},

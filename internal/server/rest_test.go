@@ -10,6 +10,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -422,5 +423,26 @@ func TestRESTHarnessUpdateResetsBeforeChange(t *testing.T) {
 	// resourceVersion predates the harness update.
 	if p.ResourceVersion >= hp.ResourceVersion && len(p.ResourceVersion) == len(hp.ResourceVersion) {
 		t.Errorf("profile reset (rv %s) happened after the harness change (rv %s)", p.ResourceVersion, hp.ResourceVersion)
+	}
+}
+
+func TestRESTHarnessConfigEditResetsModelEditKeeps(t *testing.T) {
+	ts := newTestServer(t)
+	ts.createProfile("p", testProfileSpec())
+	ts.mustDo(http.MethodPost, "/v1/profiles/p/validate", "owner-token", nil, 200)
+
+	h := testHarnessSpec()
+	h.Model = "another-model"
+	ts.mustDo(http.MethodPut, "/v1/harnesses/nib-default", "agent-token", map[string]any{"spec": h}, 200)
+	v := decodeInto[ProfileView](t, ts.mustDo(http.MethodGet, "/v1/profiles/p", "reader-token", nil, 200))
+	if !v.Spec.Validated {
+		t.Fatal("model-only edit reset validated")
+	}
+
+	h.Config = &apiextensionsv1.JSON{Raw: []byte(`{"tools":["bash","read","write"],"contextTokens":32768}`)}
+	ts.mustDo(http.MethodPut, "/v1/harnesses/nib-default", "agent-token", map[string]any{"spec": h}, 200)
+	v = decodeInto[ProfileView](t, ts.mustDo(http.MethodGet, "/v1/profiles/p", "reader-token", nil, 200))
+	if v.Spec.Validated {
+		t.Error("config edit kept validated")
 	}
 }

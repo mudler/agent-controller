@@ -415,7 +415,7 @@ func (s *Store) CreateHarness(ctx context.Context, id *Identity, name string, sp
 }
 
 // UpdateHarness replaces a harness profile spec. A change to the harness,
-// version, endpoint or login resets validated on every profile that uses
+// version, endpoint, login or config resets validated on every profile that uses
 // it.
 func (s *Store) UpdateHarness(ctx context.Context, id *Identity, name string, spec v1alpha1.HarnessProfileSpec) (*HarnessView, error) {
 	if err := Require(id, ScopeProfilesWrite); err != nil {

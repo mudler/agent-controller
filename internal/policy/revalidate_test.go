@@ -3,6 +3,7 @@ package policy
 import (
 	"testing"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/mudler/agent-controller/api/v1alpha1"
@@ -62,7 +63,13 @@ func TestHarnessChangeResets(t *testing.T) {
 		{name: "endpoint", mutate: func(h *v1alpha1.HarnessProfileSpec) { h.Endpoint = "https://api.example.com" }, want: true},
 		{name: "login", mutate: func(h *v1alpha1.HarnessProfileSpec) { h.Login = "other" }, want: true},
 		{name: "model", mutate: func(h *v1alpha1.HarnessProfileSpec) { h.Model = "other" }, want: false},
-		{name: "config", mutate: func(h *v1alpha1.HarnessProfileSpec) { h.Config = nil }, want: false},
+		{name: "config removed", mutate: func(h *v1alpha1.HarnessProfileSpec) { h.Config = nil }, want: true},
+		{name: "config tool added", mutate: func(h *v1alpha1.HarnessProfileSpec) {
+			h.Config = &apiextensionsv1.JSON{Raw: []byte(`{"tools":["bash","read","write"],"contextTokens":32768}`)}
+		}, want: true},
+		{name: "config reformatted", mutate: func(h *v1alpha1.HarnessProfileSpec) {
+			h.Config = &apiextensionsv1.JSON{Raw: []byte(`{ "contextTokens": 32768, "tools": ["bash", "read"] }`)}
+		}, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

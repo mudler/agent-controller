@@ -11,6 +11,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -321,5 +322,49 @@ func TestQueueRejectsStaleValidation(t *testing.T) {
 	}
 	if jobExists(t, c, ns, "stale-1") {
 		t.Error("a Job was created for a stale validation")
+	}
+}
+
+// editHarness updates the shared test harness profile in ns.
+func editHarness(t *testing.T, c client.Client, ns string, mutate func(h *v1alpha1.HarnessProfile)) {
+	t.Helper()
+	h := &v1alpha1.HarnessProfile{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: "nib-default"}, h); err != nil {
+		t.Fatal(err)
+	}
+	mutate(h)
+	if err := c.Update(context.Background(), h); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQueueHarnessModelEditKeepsValidation(t *testing.T) {
+	c := testenv.Client(t)
+	ns := newNamespace(t, c)
+	newFixtures(ns).create(t, c)
+	mustCreate(t, c, newTestProfile(ns, "model"))
+	editHarness(t, c, ns, func(h *v1alpha1.HarnessProfile) { h.Spec.Model = "another-model" })
+
+	mustCreate(t, c, newRun(ns, "model-1", "model", nil))
+	startQueue(t, ns, testConfig(ns))
+	waitPhase(t, c, ns, "model-1", v1alpha1.PhaseStarting)
+}
+
+func TestQueueHarnessConfigEditRejectsStaleValidation(t *testing.T) {
+	c := testenv.Client(t)
+	ns := newNamespace(t, c)
+	newFixtures(ns).create(t, c)
+	mustCreate(t, c, newTestProfile(ns, "cfg"))
+	// The profile keeps spec.validated (no server in this test), but the
+	// owner approved other tools.
+	editHarness(t, c, ns, func(h *v1alpha1.HarnessProfile) {
+		h.Spec.Config = &apiextensionsv1.JSON{Raw: []byte(`{"tools":["bash","read","write"],"contextTokens":32768}`)}
+	})
+
+	mustCreate(t, c, newRun(ns, "cfg-1", "cfg", nil))
+	startQueue(t, ns, testConfig(ns))
+	run := waitPhase(t, c, ns, "cfg-1", v1alpha1.PhaseRejected)
+	if !strings.Contains(run.Status.Message, "not validated") {
+		t.Errorf("message = %q", run.Status.Message)
 	}
 }

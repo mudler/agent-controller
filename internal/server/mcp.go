@@ -238,7 +238,7 @@ func (t *mcpTools) register(srv *mcp.Server) {
 			}
 			return result(s.CreateHarness(ctx, id, in.Name, spec))
 		})
-	mcp.AddTool(srv, tool("update_harness", "Replace the spec of a harness profile. Changing harness, version, endpoint or login clears validation of the profiles that use it."),
+	mcp.AddTool(srv, tool("update_harness", "Replace the spec of a harness profile. Changing harness, version, endpoint, login or config clears validation of the profiles that use it; a model change alone does not."),
 		func(ctx context.Context, req *mcp.CallToolRequest, in specInput) (*mcp.CallToolResult, any, error) {
 			id := identityOf(req)
 			if err := Require(id, ScopeProfilesWrite); err != nil {

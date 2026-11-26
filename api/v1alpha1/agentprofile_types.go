@@ -104,9 +104,11 @@ type AgentProfileSpec struct {
 // ValidationBinding records the objects the owner validated a profile
 // against. A profile counts as validated only while they are unchanged.
 type ValidationBinding struct {
-	HarnessUID        types.UID `json:"harnessUID"`
-	HarnessGeneration int64     `json:"harnessGeneration"`
-	GitHubLoginUID    types.UID `json:"githubLoginUID"`
+	HarnessUID types.UID `json:"harnessUID"`
+	// HarnessHash is a hash of the approval-relevant harness fields: kind,
+	// version, endpoint, login and config. The model is not part of it.
+	HarnessHash    string    `json:"harnessHash"`
+	GitHubLoginUID types.UID `json:"githubLoginUID"`
 }
 
 // AgentProfileStatus is written by the controller, except validatedFor,

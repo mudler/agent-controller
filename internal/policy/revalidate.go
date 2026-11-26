@@ -17,10 +17,7 @@ func NeedsRevalidation(old, updated *v1alpha1.AgentProfileSpec) bool {
 
 // HarnessChangeResets reports whether a harness profile update must reset
 // validated on every profile that references it: a change to harness,
-// version, endpoint or login.
+// version, endpoint, login or config. A model change alone does not.
 func HarnessChangeResets(old, updated *v1alpha1.HarnessProfileSpec) bool {
-	return old.Harness != updated.Harness ||
-		old.Version != updated.Version ||
-		old.Endpoint != updated.Endpoint ||
-		old.Login != updated.Login
+	return HarnessApprovalHash(old) != HarnessApprovalHash(updated)
 }
