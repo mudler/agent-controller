@@ -42,8 +42,8 @@ type RunReconciler struct {
 	// Reader lists run objects and locks without the cache.
 	Reader client.Reader
 	Logs   LogReader
-	Cfg   Config
-	Clock clock.PassiveClock
+	Cfg    Config
+	Clock  clock.PassiveClock
 }
 
 // Reconcile updates one run.
