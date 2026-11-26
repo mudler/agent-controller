@@ -8,6 +8,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/mudler/agent-controller/internal/controller"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -51,9 +56,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runController(_ []string, stderr io.Writer) int {
-	fmt.Fprintln(stderr, "controller: not implemented")
-	return 1
+func runController(args []string, stderr io.Writer) int {
+	cfg, opts, err := controller.ParseControllerFlags(args)
+	if err != nil {
+		fmt.Fprintf(stderr, "controller: %v\n", err)
+		return 2
+	}
+	ctrl.SetLogger(zap.New(zap.WriteTo(stderr)))
+	restCfg, err := ctrl.GetConfig()
+	if err != nil {
+		fmt.Fprintf(stderr, "controller: loading kubeconfig: %v\n", err)
+		return 1
+	}
+	mgr, err := controller.NewManager(restCfg, cfg, opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "controller: %v\n", err)
+		return 1
+	}
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		fmt.Fprintf(stderr, "controller: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runServer(_ []string, stderr io.Writer) int {

@@ -8,13 +8,11 @@ import (
 	"sync"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/mudler/agent-controller/api/v1alpha1"
+	"github.com/mudler/agent-controller/internal/scheme"
 )
 
 var (
@@ -24,19 +22,8 @@ var (
 	startErr error
 
 	// Scheme holds the core types and the agents.mudler.dev types.
-	Scheme = newScheme()
+	Scheme = scheme.New()
 )
-
-func newScheme() *runtime.Scheme {
-	s := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(s); err != nil {
-		panic(err)
-	}
-	if err := v1alpha1.AddToScheme(s); err != nil {
-		panic(err)
-	}
-	return s
-}
 
 // RepoRoot returns the directory that holds go.mod.
 func RepoRoot() (string, error) {
