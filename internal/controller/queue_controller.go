@@ -43,6 +43,10 @@ var memoryClaimSize = resource.MustParse("1Gi")
 
 var errLockBusy = errors.New("memory lock held by another run")
 
+// errNotAdmissible means fresh objects no longer allow the run to start.
+// The run stays queued; the next pass rejects it with a reason.
+var errNotAdmissible = errors.New("profile no longer valid or validated")
+
 // QueueReconciler admits queued runs. It runs as one singleton reconcile
 // that reads everything through the uncached reader, so a run admitted in
 // the previous pass is never counted twice.
@@ -84,6 +88,8 @@ func (r *QueueReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.R
 		switch {
 		case errors.Is(err, errLockBusy):
 			log.Info("memory lock busy; run stays queued", "run", name)
+		case errors.Is(err, errNotAdmissible):
+			log.Info("profile changed since the snapshot; run stays queued", "run", name)
 		case err != nil:
 			errs = append(errs, fmt.Errorf("admitting %s: %w", name, err))
 		}
@@ -119,6 +125,12 @@ func (r *QueueReconciler) snapshot(ctx context.Context) (admission.Snapshot, map
 	snap := admission.Snapshot{Profiles: map[string]admission.ProfileState{}, MemoryLockHolder: map[string]string{}}
 	runs := map[string]*v1alpha1.AgentRun{}
 
+	// Read runs before the policy and profiles. A run is created after its
+	// profile, so every run read here has its profile in the later read.
+	list := &v1alpha1.AgentRunList{}
+	if err := r.Reader.List(ctx, list, client.InNamespace(ns)); err != nil {
+		return snap, nil, fmt.Errorf("listing runs: %w", err)
+	}
 	env, err := LoadEnv(ctx, r.Reader, ns, r.Cfg.HarnessVersions)
 	if err != nil {
 		return snap, nil, err
@@ -146,10 +158,6 @@ func (r *QueueReconciler) snapshot(ctx context.Context) (admission.Snapshot, map
 		snap.Profiles[p.Name] = state
 	}
 
-	list := &v1alpha1.AgentRunList{}
-	if err := r.Reader.List(ctx, list, client.InNamespace(ns)); err != nil {
-		return snap, nil, fmt.Errorf("listing runs: %w", err)
-	}
 	allRuns := map[string]*v1alpha1.AgentRun{}
 	for i := range list.Items {
 		run := &list.Items[i]
@@ -206,9 +214,21 @@ func (r *QueueReconciler) snapshot(ctx context.Context) (admission.Snapshot, map
 // restart.
 func (r *QueueReconciler) admit(ctx context.Context, run *v1alpha1.AgentRun) error {
 	ns := run.Namespace
+	// Check again on fresh objects: the snapshot may be older than a
+	// profile, harness, login or policy change.
 	prof := &v1alpha1.AgentProfile{}
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: ns, Name: run.Spec.Profile}, prof); err != nil {
+		if apierrors.IsNotFound(err) {
+			return errNotAdmissible
+		}
 		return fmt.Errorf("getting profile: %w", err)
+	}
+	env, err := LoadEnv(ctx, r.Reader, ns, r.Cfg.HarnessVersions)
+	if err != nil {
+		return err
+	}
+	if !prof.DeletionTimestamp.IsZero() || policy.ValidateProfile(env, &prof.Spec) != nil || !policy.ValidationCurrent(env, prof) {
+		return errNotAdmissible
 	}
 	h := &v1alpha1.HarnessProfile{}
 	if err := r.Reader.Get(ctx, client.ObjectKey{Namespace: ns, Name: prof.Spec.Harness}, h); err != nil {
