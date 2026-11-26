@@ -1,0 +1,47 @@
+# Sample launcher Job template. Replace the image, service account and
+# volumes with the launcher of your deployment.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: launcher-template
+  labels:
+    app.kubernetes.io/name: agent-launcher
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-launcher
+    spec:
+      serviceAccountName: agent-launcher
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: launcher
+          image: example.com/agent-runner:current
+          command: [python3, /app/launcher.py]
+          env:
+            - name: AGENT
+              value: placeholder
+            - name: LOG_FORMAT
+              value: json
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: settings
+              mountPath: /etc/agent
+              readOnly: true
+      volumes:
+        - name: settings
+          configMap:
+            name: agent-settings

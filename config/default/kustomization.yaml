@@ -1,0 +1,17 @@
+# Default deployment. Objects carry their own namespaces: the agents
+# namespace holds the controller, the server and the agent objects; login
+# Secrets and profile history live in their own namespaces, so no global
+# namespace override is set here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - ../crd
+  - ../rbac
+  - controller.yaml
+  - server.yaml
+configMapGenerator:
+  - name: agent-controller-job-template
+    namespace: agents
+    files:
+      - job-template.yaml
