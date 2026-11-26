@@ -155,8 +155,9 @@ func (r *RunReconciler) writeStatus(ctx context.Context, run *v1alpha1.AgentRun,
 }
 
 // finalize cleans up after a final phase or a deletion, then releases the
-// locks and removes the finalizer. Locks go only after a cleanup pass finds
-// no run objects left, so no sandbox outlives its memory lock. For a
+// locks and removes the finalizer. Locks go only after two cleanup passes,
+// at least cleanupRetry apart in separate reconciles, find no run objects
+// left, so no sandbox outlives its memory lock. For a
 // cancelled or deleted run the launcher Pod is stopped first.
 func (r *RunReconciler) finalize(ctx context.Context, run *v1alpha1.AgentRun) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(run, FinalizerCleanup) {
@@ -167,12 +168,29 @@ func (r *RunReconciler) finalize(ctx context.Context, run *v1alpha1.AgentRun) (c
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !done {
+	first, seen := run.Annotations[AnnotationCleanupEmptySince]
+	switch {
+	case !done && seen:
+		delete(run.Annotations, AnnotationCleanupEmptySince)
+		return r.updateRun(ctx, run, ctrl.Result{RequeueAfter: cleanupRetry})
+	case !done:
 		return ctrl.Result{RequeueAfter: cleanupRetry}, nil
+	case !seen:
+		// First empty pass. A terminating launcher may still create an
+		// object after this pass listed its kind, so confirm later.
+		if run.Annotations == nil {
+			run.Annotations = map[string]string{}
+		}
+		run.Annotations[AnnotationCleanupEmptySince] = r.Clock.Now().UTC().Format(time.RFC3339Nano)
+		return r.updateRun(ctx, run, ctrl.Result{RequeueAfter: cleanupRetry})
+	}
+	if since, err := time.Parse(time.RFC3339Nano, first); err == nil && r.Clock.Since(since) < cleanupRetry {
+		return ctrl.Result{RequeueAfter: cleanupRetry - r.Clock.Since(since)}, nil
 	}
 	if err := ReleaseLocks(ctx, r.Client, r.Reader, run.Namespace, run.Name); err != nil {
 		return ctrl.Result{}, err
 	}
+	delete(run.Annotations, AnnotationCleanupEmptySince)
 	controllerutil.RemoveFinalizer(run, FinalizerCleanup)
 	if err := r.Update(ctx, run); err != nil {
 		if apierrors.IsConflict(err) {
@@ -181,6 +199,16 @@ func (r *RunReconciler) finalize(ctx context.Context, run *v1alpha1.AgentRun) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *RunReconciler) updateRun(ctx context.Context, run *v1alpha1.AgentRun, res ctrl.Result) (ctrl.Result, error) {
+	if err := r.Update(ctx, run); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	return res, nil
 }
 
 func (r *RunReconciler) deleteJob(ctx context.Context, run *v1alpha1.AgentRun, propagation metav1.DeletionPropagation) error {

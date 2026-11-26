@@ -30,8 +30,8 @@ type CleanupOptions struct {
 
 // Cleanup deletes the run-labeled Sandboxes, Services, NetworkPolicies,
 // ConfigMaps and non-launcher Pods of a run. It lists through the uncached
-// reader r. It never deletes Leases: locks are released by ReleaseLocks
-// only after a pass reports done. done is true when a pass finds none of
+// reader r, Pods first. It never deletes Leases: locks are released by
+// ReleaseLocks only after two passes in separate reconciles report done. done is true when a pass finds none of
 // these objects and no running launcher Pod. A missing Sandbox CRD is not
 // an error.
 func Cleanup(ctx context.Context, c client.Client, r client.Reader, namespace, run string, opts CleanupOptions) (done bool, err error) {
@@ -42,6 +42,25 @@ func Cleanup(ctx context.Context, c client.Client, r client.Reader, namespace, r
 
 	remaining := 0
 	var errs []error
+	// Pods first: a launcher still running may create more objects, and a
+	// pass that sees it is not done.
+	pods := &corev1.PodList{}
+	if err := r.List(ctx, pods, client.InNamespace(namespace), runSel); err != nil {
+		errs = append(errs, fmt.Errorf("listing pods: %w", err))
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		launcher := pod.Labels[LabelComponent] == ComponentLauncher
+		if launcher && !opts.StopLauncher {
+			if !podFinished(pod) {
+				remaining++
+			}
+			continue
+		}
+		remaining++
+		errs = append(errs, deleteObject(ctx, c, pod))
+	}
+
 	for _, list := range []client.ObjectList{sandboxes, &corev1.ServiceList{}, &networkingv1.NetworkPolicyList{}, &corev1.ConfigMapList{}} {
 		if err := r.List(ctx, list, client.InNamespace(namespace), runSel); err != nil {
 			if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
@@ -63,23 +82,6 @@ func Cleanup(ctx context.Context, c client.Client, r client.Reader, namespace, r
 			remaining++
 			errs = append(errs, deleteObject(ctx, c, obj))
 		}
-	}
-
-	pods := &corev1.PodList{}
-	if err := r.List(ctx, pods, client.InNamespace(namespace), runSel); err != nil {
-		errs = append(errs, fmt.Errorf("listing pods: %w", err))
-	}
-	for i := range pods.Items {
-		pod := &pods.Items[i]
-		launcher := pod.Labels[LabelComponent] == ComponentLauncher
-		if launcher && !opts.StopLauncher {
-			if !podFinished(pod) {
-				remaining++
-			}
-			continue
-		}
-		remaining++
-		errs = append(errs, deleteObject(ctx, c, pod))
 	}
 
 	if err := errors.Join(errs...); err != nil {

@@ -19,6 +19,9 @@ const (
 	FinalizerCleanup = "agents.mudler.dev/cleanup"
 	// AnnotationLastChangedBy holds the token name of the last profile writer.
 	AnnotationLastChangedBy = "agents.mudler.dev/last-changed-by"
+	// AnnotationCleanupEmptySince records when a cleanup pass first found
+	// no run objects. The locks are released on a later empty pass.
+	AnnotationCleanupEmptySince = "agents.mudler.dev/cleanup-empty-since"
 	// LauncherContainer is the container the controller patches in the Job.
 	LauncherContainer = "launcher"
 )
