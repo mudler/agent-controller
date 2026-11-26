@@ -487,3 +487,15 @@ func TestErrorsFormat(t *testing.T) {
 		t.Errorf("Error() = %q", got)
 	}
 }
+
+func TestValidateProfileRejectsDotSlugs(t *testing.T) {
+	for _, slug := range []string{"example-org/.", "example-org/..", "./repo", "../repo"} {
+		t.Run(slug, func(t *testing.T) {
+			env := testEnv()
+			env.Logins["gh-example"].Spec.Repos = []string{slug, "./*", "../*"}
+			p := testProfile()
+			p.Repos[0].Slug = slug
+			checkErr(t, ValidateProfile(env, p), "repos[0].slug", "must be owner/name", false)
+		})
+	}
+}

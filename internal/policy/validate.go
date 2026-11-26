@@ -138,7 +138,7 @@ func validateRepos(env Env, p *v1alpha1.AgentProfileSpec) Errors {
 		errs.add("repos", "must have exactly one repository")
 	}
 	for i, r := range p.Repos {
-		if !slugPattern.MatchString(r.Slug) {
+		if !ValidSlug(r.Slug) {
 			errs.add(fmt.Sprintf("repos[%d].slug", i), "must be owner/name")
 		}
 		if strings.TrimSpace(r.Branch) == "" {
@@ -264,6 +264,17 @@ func ValidateRun(env Env, p *v1alpha1.AgentProfileSpec, r *v1alpha1.AgentRunSpec
 		errs.add("memory", "memory is disabled for profile "+r.Profile, "false")
 	}
 	return errs.orNil()
+}
+
+// ValidSlug reports whether slug is "owner/name" with neither part "." or
+// "..".
+func ValidSlug(slug string) bool {
+	if !slugPattern.MatchString(slug) {
+		return false
+	}
+	owner, name, _ := strings.Cut(slug, "/")
+	dots := func(s string) bool { return s == "." || s == ".." }
+	return !dots(owner) && !dots(name)
 }
 
 // EndpointHost returns the host:443 authority of an https endpoint.
