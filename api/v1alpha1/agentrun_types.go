@@ -43,7 +43,7 @@ const MaxTaskLength = 4000
 
 // AgentRunSpec requests one run of a profile.
 // +kubebuilder:validation:XValidation:rule="self.profile == oldSelf.profile && self.trigger == oldSelf.trigger && self.requestedBy == oldSelf.requestedBy",message="profile, trigger and requestedBy are immutable"
-// +kubebuilder:validation:XValidation:rule="(has(self.task) ? self.task : '') == (has(oldSelf.task) ? oldSelf.task : '')",message="task is immutable"
+// +kubebuilder:validation:XValidation:rule="has(self.task) == has(oldSelf.task) && (!has(self.task) || self.task == oldSelf.task)",message="task is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.cancel) || !oldSelf.cancel || (has(self.cancel) && self.cancel)",message="cancel cannot be undone"
 type AgentRunSpec struct {
 	// +kubebuilder:validation:MinLength=1

@@ -84,8 +84,8 @@ spec:
               rule: self.profile == oldSelf.profile && self.trigger == oldSelf.trigger
                 && self.requestedBy == oldSelf.requestedBy
             - message: task is immutable
-              rule: '(has(self.task) ? self.task : '''') == (has(oldSelf.task) ? oldSelf.task
-                : '''')'
+              rule: has(self.task) == has(oldSelf.task) && (!has(self.task) || self.task
+                == oldSelf.task)
             - message: cancel cannot be undone
               rule: '!has(oldSelf.cancel) || !oldSelf.cancel || (has(self.cancel)
                 && self.cancel)'
