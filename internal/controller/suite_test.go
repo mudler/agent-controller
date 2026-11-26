@@ -123,6 +123,13 @@ func testConfig(ns string) Config {
 // startManager runs a manager scoped to ns until the test ends.
 func startManager(t *testing.T, ns string, setup func(mgr ctrl.Manager) error) {
 	t.Helper()
+	startManagerStoppable(t, ns, setup)
+}
+
+// startManagerStoppable runs a manager scoped to ns and returns a function
+// that stops it. The test cleanup also stops it.
+func startManagerStoppable(t *testing.T, ns string, setup func(mgr ctrl.Manager) error) func() {
+	t.Helper()
 	mgr, err := ctrl.NewManager(testenv.Config(t), ctrl.Options{
 		Scheme:                 testenv.Scheme,
 		Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{ns: {}}},
@@ -145,10 +152,15 @@ func startManager(t *testing.T, ns string, setup func(mgr ctrl.Manager) error) {
 			t.Errorf("manager stopped: %v", err)
 		}
 	}()
-	t.Cleanup(func() {
-		cancel()
-		wg.Wait()
-	})
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			cancel()
+			wg.Wait()
+		})
+	}
+	t.Cleanup(stop)
+	return stop
 }
 
 func ptrTrue() *bool {
