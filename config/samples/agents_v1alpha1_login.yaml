@@ -1,0 +1,9 @@
+apiVersion: agents.mudler.dev/v1alpha1
+kind: Login
+metadata:
+  name: gh-example
+spec:
+  kind: github-token
+  repos: [example-org/example-repo, "example-org/*"]
+  egressAll: false
+  description: Bot token for example lanes

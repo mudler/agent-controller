@@ -1,0 +1,13 @@
+apiVersion: agents.mudler.dev/v1alpha1
+kind: HarnessProfile
+metadata:
+  name: nib-default
+spec:
+  harness: nib
+  version: v0.14.2
+  model: default
+  endpoint: https://models.example.com/v1
+  login: model-example
+  config:
+    tools: [bash, read, write, edit, glob, grep]
+    contextTokens: 32768

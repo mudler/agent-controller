@@ -1,0 +1,280 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: agentprofiles.agents.mudler.dev
+spec:
+  group: agents.mudler.dev
+  names:
+    kind: AgentProfile
+    listKind: AgentProfileList
+    plural: agentprofiles
+    singular: agentprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.harness
+      name: Harness
+      type: string
+    - jsonPath: .spec.validated
+      name: Validated
+      type: boolean
+    - jsonPath: .status.conditions[?(@.type=="Valid")].status
+      name: Valid
+      type: string
+    - jsonPath: .status.version
+      name: Version
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AgentProfile is a runnable agent configuration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentProfileSpec describes what a run of the profile does.
+            properties:
+              budget:
+                description: Budget limits one session.
+                properties:
+                  iterations:
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  sessionSeconds:
+                    format: int32
+                    minimum: 1
+                    type: integer
+                required:
+                - iterations
+                - sessionSeconds
+                type: object
+              egress:
+                description: ProfileEgress sets the egress of the runs of a profile.
+                properties:
+                  extraHosts:
+                    description: |-
+                      ExtraHosts adds host:443 authorities in allowlist mode. Each must be in
+                      the policy.
+                    items:
+                      pattern: ^[a-z0-9.-]+:443$
+                      type: string
+                    type: array
+                  mode:
+                    description: EgressMode selects how a run reaches the network.
+                    enum:
+                    - allowlist
+                    - all
+                    type: string
+                required:
+                - mode
+                type: object
+              github:
+                description: GitHub names a Login of kind github-token that allows
+                  every repository.
+                minLength: 1
+                type: string
+              harness:
+                description: Harness names a HarnessProfile.
+                minLength: 1
+                type: string
+              maxParallel:
+                format: int32
+                minimum: 1
+                type: integer
+              memory:
+                description: MemoryMode turns the per-profile memory volume on or
+                  off.
+                enum:
+                - enabled
+                - disabled
+                type: string
+              prompt:
+                maxLength: 32768
+                minLength: 1
+                type: string
+              repos:
+                description: Repos holds exactly one repository.
+                items:
+                  description: RepoRef names a GitHub repository and branch.
+                  properties:
+                    branch:
+                      minLength: 1
+                      type: string
+                    slug:
+                      pattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
+                      type: string
+                  required:
+                  - branch
+                  - slug
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
+              resources:
+                description: ProfileResources sizes the sandbox.
+                properties:
+                  cpu:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  memory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  tmp:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  workspace:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                required:
+                - cpu
+                - memory
+                - tmp
+                - workspace
+                type: object
+              schedule:
+                description: Schedule starts runs on a cron schedule.
+                properties:
+                  cron:
+                    description: Cron is a standard five-field cron expression.
+                    minLength: 1
+                    type: string
+                  suspend:
+                    type: boolean
+                  timeZone:
+                    description: TimeZone is an IANA time zone name. The default is
+                      UTC.
+                    type: string
+                required:
+                - cron
+                type: object
+              validated:
+                description: Validated is set only by the owner. Unvalidated profiles
+                  do not run.
+                type: boolean
+            required:
+            - budget
+            - egress
+            - github
+            - harness
+            - maxParallel
+            - memory
+            - prompt
+            - repos
+            - resources
+            type: object
+          status:
+            description: AgentProfileStatus is written by the controller.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastChangedBy:
+                type: string
+              lastScheduleTime:
+                format: date-time
+                type: string
+              nextScheduleTime:
+                format: date-time
+                type: string
+              version:
+                description: Version is the generation of the spec.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: the name must be a DNS-1035 label of at most 40 characters
+          rule: self.metadata.name.size() <= 40 && self.metadata.name.matches('^[a-z]([-a-z0-9]*[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

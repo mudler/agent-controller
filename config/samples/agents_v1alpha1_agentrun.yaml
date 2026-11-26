@@ -1,0 +1,9 @@
+apiVersion: agents.mudler.dev/v1alpha1
+kind: AgentRun
+metadata:
+  generateName: example-
+spec:
+  profile: example
+  task: Fix the flaky test in the scheduler package.
+  trigger: manual
+  requestedBy: planner

@@ -1,0 +1,137 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: agentpolicies.agents.mudler.dev
+spec:
+  group: agents.mudler.dev
+  names:
+    kind: AgentPolicy
+    listKind: AgentPolicyList
+    plural: agentpolicies
+    singular: agentpolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AgentPolicy is the Git-owned policy. Only one object, named "default",
+          exists.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentPolicySpec sets the outer limits for profiles, harness
+              profiles and runs.
+            properties:
+              egress:
+                description: PolicyEgress is the egress ceiling.
+                properties:
+                  allowAll:
+                    description: AllowAll permits profiles with egress mode "all".
+                    type: boolean
+                  hosts:
+                    description: |-
+                      Hosts lists the exact host:443 authorities that runs may reach in
+                      allowlist mode.
+                    items:
+                      pattern: ^[a-z0-9.-]+:443$
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - allowAll
+                - hosts
+                type: object
+              harnesses:
+                description: Harnesses lists the harness kinds that HarnessProfiles
+                  may use.
+                items:
+                  description: HarnessKind names a harness implementation in the runner
+                    image.
+                  enum:
+                  - nib
+                  - claude-code
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              limits:
+                description: PolicyLimits holds the ceilings for every profile.
+                properties:
+                  cpu:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  globalSlots:
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxParallelPerProfile:
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  memory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  sessionSeconds:
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  workspace:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                required:
+                - cpu
+                - globalSlots
+                - maxParallelPerProfile
+                - memory
+                - sessionSeconds
+                - workspace
+                type: object
+              modelEndpoints:
+                description: ModelEndpoints lists the endpoints that HarnessProfiles
+                  may use.
+                items:
+                  pattern: ^https://
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+            required:
+            - egress
+            - harnesses
+            - limits
+            - modelEndpoints
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: the AgentPolicy must be named default
+          rule: self.metadata.name == 'default'
+    served: true
+    storage: true

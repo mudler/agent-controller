@@ -1,0 +1,17 @@
+apiVersion: agents.mudler.dev/v1alpha1
+kind: AgentPolicy
+metadata:
+  name: default
+spec:
+  harnesses: [nib, claude-code]
+  egress:
+    hosts: [api.github.com:443, github.com:443, models.example.com:443]
+    allowAll: false
+  limits:
+    sessionSeconds: 21600
+    cpu: "8"
+    memory: 32Gi
+    workspace: 50Gi
+    maxParallelPerProfile: 4
+    globalSlots: 6
+  modelEndpoints: [https://models.example.com/v1]

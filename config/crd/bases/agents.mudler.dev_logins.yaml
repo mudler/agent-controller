@@ -1,0 +1,95 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: logins.agents.mudler.dev
+spec:
+  group: agents.mudler.dev
+  names:
+    kind: Login
+    listKind: LoginList
+    plural: logins
+    singular: login
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - jsonPath: .status.rotatedAt
+      name: Rotated
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Login is the write-only metadata of a credential.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              LoginSpec is the metadata of a credential. The value is in a Secret with
+              the same name in the logins namespace.
+            properties:
+              description:
+                maxLength: 512
+                type: string
+              egressAll:
+                description: EgressAll allows profiles with egress mode "all" to use
+                  this token.
+                type: boolean
+              kind:
+                description: LoginKind is the kind of credential a Login holds.
+                enum:
+                - github-token
+                - model-api-key
+                - claude-credentials
+                type: string
+              repos:
+                description: |-
+                  Repos lists the repositories a github-token may serve, as
+                  "owner/name" or "owner/*".
+                items:
+                  pattern: ^[A-Za-z0-9_.-]+/([A-Za-z0-9_.-]+|\*)$
+                  type: string
+                type: array
+            required:
+            - kind
+            type: object
+            x-kubernetes-validations:
+            - message: repos and egressAll apply only to github-token logins
+              rule: self.kind == 'github-token' || ((!has(self.repos) || size(self.repos)
+                == 0) && (!has(self.egressAll) || !self.egressAll))
+          status:
+            description: LoginStatus records the last rotation.
+            properties:
+              rotatedAt:
+                format: date-time
+                type: string
+              rotatedBy:
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

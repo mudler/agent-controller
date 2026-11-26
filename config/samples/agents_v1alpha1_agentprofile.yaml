@@ -1,0 +1,19 @@
+apiVersion: agents.mudler.dev/v1alpha1
+kind: AgentProfile
+metadata:
+  name: example
+spec:
+  harness: nib-default
+  repos: [{slug: example-org/example-repo, branch: main}]
+  github: gh-example
+  prompt: |
+    Take one ready task from the issue tracker and open a pull request.
+  egress:
+    mode: allowlist
+    extraHosts: [api.github.com:443, github.com:443]
+  budget: {sessionSeconds: 3000, iterations: 100}
+  resources: {cpu: "2", memory: 4Gi, workspace: 8Gi, tmp: 1Gi}
+  schedule: {cron: "30 1 * * *", timeZone: Etc/UTC, suspend: true}
+  maxParallel: 1
+  memory: enabled
+  validated: false
