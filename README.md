@@ -42,6 +42,12 @@ curl -H "Authorization: Bearer $TOKEN" -d '{"profile":"example","task":"Fix the 
   http://agent-controller.agents.svc:8080/v1/runs
 ```
 
+## Logins
+
+Credentials are `Login` objects. Many profiles and parallel runs can share
+one Login. Create and rotate them with the Logins page, the REST API or
+kubectl. See [docs/logins.md](docs/logins.md).
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
